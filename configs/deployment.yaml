@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-watcher-operator
+  namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-watcher-operator
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod-watcher-operator
+  template:
+    metadata:
+      labels:
+        app: pod-watcher-operator
+    spec:
+      serviceAccountName: pod-watcher-operator
+      containers:
+      - name: watcher
+        image: "" # Comment for now
+        imagePullPolicy: IfNotPresent
+
+        env:
+        - name: TELEGRAM_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: pod-watcher-secret
+              key: TELEGRAM_BOT_TOKEN
+        - name: TELEGRAM_CHAT_ID
+          valueFrom:
+            secretKeyRef:
+              name: pod-watcher-secret
+              key: TELEGRAM_CHAT_ID
+
+        ports:
+        - containerPort: 8080
+          name: metrics
+
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+          requests:
+            cpu: "20m"
+            memory: "32Mi"
+        
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532 
