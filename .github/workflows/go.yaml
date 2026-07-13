@@ -1,0 +1,53 @@
+name: Go CI
+
+on:
+    workflow_call:
+
+jobs:
+    Lint:
+        name: Linting
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+            - name: Set up Go
+              uses: actions/setup-go@v6
+              with:
+                go-version: '1.26.4'
+                cache: true
+            
+            - name: Install dependencies
+              run: |
+                go mod tidy
+                git diff --exit-code
+
+            - name: golangci-lint
+              uses: golangci/golangci-lint-action@v9
+              with:
+                version: latest
+
+    Security:
+        name: Security scan
+        needs: Lint
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                persist-credentials: false
+            - name: govulncheck
+              uses: golang/govulncheck-action@v1
+              with:
+                go-version-input: '1.26.4'
+    
+    Test:
+        name: Unit tests
+        needs: Lint
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+            - name: Set up Go
+              uses: actions/setup-go@v6
+              with:
+                go-version: '1.26.4'
+            
+            - name: Unit tests with race detector
+              run: go test -v -race ./...

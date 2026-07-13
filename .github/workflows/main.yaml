@@ -1,0 +1,20 @@
+name: Main Pipeline
+
+on:
+    push:
+        branches: [ main ]
+    pull_request:
+        branches: [ main ]
+
+jobs:
+    go-tests:
+        uses: ./.github/workflows/go.yml
+    
+    docker-registry-push:
+        uses: ./.github/workflows/docker.yml
+        needs: go-tests
+        if: github.event_name == 'push'
+        secrets: inherit
+        permissions:
+            contents: read
+            packages: write
