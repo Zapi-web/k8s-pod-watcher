@@ -1,5 +1,7 @@
 package notifier
 
+import "context"
+
 type Notifier interface {
-	SendAlert()
+	SendAlert(ctx context.Context, ChatID string, alert string) error
 }
