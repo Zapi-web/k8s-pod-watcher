@@ -33,11 +33,12 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 
 	_, err := podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			pod, ok := newObj.(*v1.Pod)
-			if !ok {
+			oldPod, ok1 := oldObj.(*v1.Pod)
+			newPod, ok2 := newObj.(*v1.Pod)
+			if !ok1 || !ok2 || oldPod == nil || newPod == nil {
 				return
 			}
-			p.checkPod(ctx, pod)
+			p.processPodUpdate(ctx, oldPod, newPod)
 		},
 	})
 
@@ -55,6 +56,50 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 	return nil
 }
 
-func (p *PodWatcher) checkPod(ctx context.Context, pod *v1.Pod) {
+func (p *PodWatcher) processPodUpdate(ctx context.Context, oldPod, newPod *v1.Pod) {
+	for _, newStatus := range newPod.Status.ContainerStatuses {
+		var oldStatus v1.ContainerStatus
+		foundOld := false
 
+		for _, os := range oldPod.Status.ContainerStatuses {
+			if os.Name == newStatus.Name {
+				oldStatus = os
+				foundOld = true
+				break
+			}
+		}
+
+		if foundOld && newStatus.RestartCount > oldStatus.RestartCount {
+			if newStatus.State.Waiting != nil && newStatus.State.Waiting.Reason == "CrashLoopBackOff" {
+				p.sendAlert(ctx, newPod.Name, newStatus.Name, "CrashLoopBackOff", newStatus.RestartCount)
+				return
+			}
+
+			if newStatus.State.Terminated != nil && newStatus.State.Terminated.Reason == "OOMKilled" {
+				p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled", newStatus.RestartCount)
+				return
+			}
+
+			if newStatus.LastTerminationState.Terminated != nil && newStatus.LastTerminationState.Terminated.Reason == "OOMKilled" {
+				p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled (Previous run)", newStatus.RestartCount)
+				return
+			}
+		}
+	}
+}
+
+func (p *PodWatcher) sendAlert(ctx context.Context, podName, containerName, reason string, restarts int32) {
+	msg := fmt.Sprintf(
+		"*Alert: Container Issue Detected!*\n\n"+
+			"*Pod*: '%s'\n"+
+			"*Container*: '%s'\n"+
+			"*Issue*: '%s'\n"+
+			"*Restart Count*: '%d'",
+		podName, containerName, reason, restarts,
+	)
+
+	slog.Warn("indentified crash reason; sending an alert", "pod", podName, "reason", reason)
+	if err := p.notifier.SendAlert(ctx, p.chatID, msg); err != nil {
+		slog.Error("failed to send a alert", "err", err)
+	}
 }
