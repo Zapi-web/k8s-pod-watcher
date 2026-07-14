@@ -57,6 +57,8 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 }
 
 func (p *PodWatcher) processPodUpdate(ctx context.Context, oldPod, newPod *v1.Pod) {
+	slog.Debug("processing pod update event", "pod", newPod.Name, "namespace", newPod.Namespace)
+
 	for _, newStatus := range newPod.Status.ContainerStatuses {
 		var oldStatus v1.ContainerStatus
 		foundOld := false
@@ -69,21 +71,28 @@ func (p *PodWatcher) processPodUpdate(ctx context.Context, oldPod, newPod *v1.Po
 			}
 		}
 
-		if foundOld && newStatus.RestartCount > oldStatus.RestartCount {
-			if newStatus.State.Waiting != nil && newStatus.State.Waiting.Reason == "CrashLoopBackOff" {
-				p.sendAlert(ctx, newPod.Name, newStatus.Name, "CrashLoopBackOff", newStatus.RestartCount)
-				return
-			}
+		isNewWaitingCrash := newStatus.State.Waiting != nil && newStatus.State.Waiting.Reason == "CrashLoopBackOff"
+		isOldWaitingCrash := foundOld && oldStatus.State.Waiting != nil && oldStatus.State.Waiting.Reason == "CrashLoopBackOff"
 
-			if newStatus.State.Terminated != nil && newStatus.State.Terminated.Reason == "OOMKilled" {
-				p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled", newStatus.RestartCount)
-				return
-			}
+		isNewOOMKilled := newStatus.State.Terminated != nil && newStatus.State.Terminated.Reason == "OOMKilled"
+		isOldOOMKilled := foundOld && oldStatus.State.Terminated != nil && oldStatus.State.Terminated.Reason == "OOMKilled"
 
-			if newStatus.LastTerminationState.Terminated != nil && newStatus.LastTerminationState.Terminated.Reason == "OOMKilled" {
-				p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled (Previous run)", newStatus.RestartCount)
-				return
-			}
+		isNewPrevOOMKilled := newStatus.LastTerminationState.Terminated != nil && newStatus.LastTerminationState.Terminated.Reason == "OOMKilled"
+		isOldPrevOOMKilled := foundOld && oldStatus.LastTerminationState.Terminated != nil && oldStatus.LastTerminationState.Terminated.Reason == "OOMKilled"
+
+		if isNewWaitingCrash && (!foundOld || !isOldWaitingCrash) {
+			p.sendAlert(ctx, newPod.Name, newStatus.Name, "CrashLoopBackOff", newStatus.RestartCount)
+			return
+		}
+
+		if isNewOOMKilled && (!foundOld || !isOldOOMKilled) {
+			p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled", newStatus.RestartCount)
+			return
+		}
+
+		if isNewPrevOOMKilled && (!foundOld || !isOldPrevOOMKilled) {
+			p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled (previous run)", newStatus.RestartCount)
+			return
 		}
 	}
 }
