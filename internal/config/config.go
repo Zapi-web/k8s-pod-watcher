@@ -7,8 +7,8 @@ import (
 )
 
 type Config struct {
-	Addr     string `env:"TELEGRAM_BOT_TOKEN"`
-	Port     string `env:"TELEGRAM_CHAT_ID"`
+	Token    string `env:"TELEGRAM_BOT_TOKEN"`
+	ChatID   string `env:"TELEGRAM_CHAT_ID"`
 	LogLevel string `env:"LOG_LEVEL" env-default:"info"`
 }
 
