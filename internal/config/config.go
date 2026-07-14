@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/ilyakaznacheev/cleanenv"
 )
@@ -15,10 +16,14 @@ type Config struct {
 func Init() (*Config, error) {
 	var cfg Config
 
-	err := cleanenv.ReadConfig(".env", &cfg)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
+	if _, err := os.Stat(".env"); err == nil {
+		if err := cleanenv.ReadConfig(".env", &cfg); err != nil {
+			return nil, fmt.Errorf("failed to read .env file: %w", err)
+		}
+	} else {
+		if err := cleanenv.ReadEnv(&cfg); err != nil {
+			return nil, fmt.Errorf("failed to read environment variables: %w", err)
+		}
 	}
 
 	return &cfg, nil
