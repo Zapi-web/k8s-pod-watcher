@@ -1,0 +1,32 @@
+# =======================
+# APP SETTINGS
+# =======================
+
+appLabel: pod-watcher-operator
+
+image:
+  repository: ghcr.io/zapi-web/k8s-pod-watcher
+  tag: latest
+  pullPolicy: IfNotPresent
+
+logLevel: info
+
+# =======================
+# SECRETS
+# =======================
+
+telegram:
+  token: ""
+  chatID: ""
+
+# =======================
+# RESOURCES
+# =======================
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 64Mi
+  requests:
+    cpu: 20m
+    memory: 32Mi

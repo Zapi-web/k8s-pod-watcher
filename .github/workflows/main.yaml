@@ -18,3 +18,12 @@ jobs:
         permissions:
             contents: read
             packages: write
+
+    helm-registry-push:
+        uses: ./.github/workflows/helm.yaml
+        needs: go-tests
+        if: github.event_name == 'push'
+        secrets: inherit
+        permissions:
+            contents: read
+            packages: write
