@@ -43,7 +43,12 @@ func (t *TelegramNotifier) SendAlert(ctx context.Context, chatID string, alert s
 	return nil
 }
 
-func (t *TelegramNotifier) Stop(ctx context.Context) {
+func (t *TelegramNotifier) Stop(ctx context.Context) error {
 	slog.Info("trying to stop the bot...")
-	_, _ = t.tgBot.Close(ctx)
+	_, err := t.tgBot.Close(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to stop graceful: %w", err)
+	}
+
+	return nil
 }
