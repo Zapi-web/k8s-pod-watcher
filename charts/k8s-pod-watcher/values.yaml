@@ -11,6 +11,11 @@ image:
 
 logLevel: info
 
+metrics:
+  enabled: false
+  port: 8080
+  path: /metrics
+
 # =======================
 # SECRETS
 # =======================

@@ -20,7 +20,14 @@ spec:
     metadata:
       labels:
         app: {{ .Values.appLabel }}
+      {{- if .Values.metrics.enabled }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: {{ .Values.metrics.path | quote }}
+        prometheus.io/port: {{ .Values.metrics.port | default "8080" | quote }}
+      {{- end }}
     spec:
+      terminationGracePeriodSeconds: 15
       serviceAccountName: {{ .Release.Name }}-operator
       containers:
       - name: watcher
@@ -39,17 +46,35 @@ spec:
               name: {{ .Release.Name }}-secret
               key: TELEGRAM_CHAT_ID
         - name: LOG_LEVEL
-          value: {{ .Values.logLevel | quote }}
+          value: {{ .Values.logLevel | default "info" | quote }}
+        - name: METRICS_PORT
+          value: {{ .Values.metrics.port | default "8080" | quote }}
 
         ports:
-        - containerPort: 8080
+        - containerPort: {{ .Values.metrics.port | default 8080 }}
           name: metrics
 
         resources:
           {{- toYaml .Values.resources | nindent 10}}
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: metrics
+          initialDelaySeconds: 5
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: metrics
+          initialDelaySeconds: 5
+          periodSeconds: 10
         
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           runAsNonRoot: true
           runAsUser: 65532 
+          capabilities:
+            drop:
+              - ALL
