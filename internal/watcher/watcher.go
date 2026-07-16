@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/Zapi-web/k8s-pod-watcher/internal/metrics"
 	"github.com/Zapi-web/k8s-pod-watcher/internal/notifier"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
@@ -16,13 +17,15 @@ type PodWatcher struct {
 	clientset kubernetes.Interface
 	notifier  notifier.Notifier
 	chatID    string
+	metrics   *metrics.Metrics
 }
 
-func New(clientset kubernetes.Interface, n notifier.Notifier, chatID string) *PodWatcher {
+func New(clientset kubernetes.Interface, n notifier.Notifier, chatID string, m *metrics.Metrics) *PodWatcher {
 	return &PodWatcher{
 		clientset: clientset,
 		notifier:  n,
 		chatID:    chatID,
+		metrics:   m,
 	}
 }
 
@@ -33,6 +36,7 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 
 	_, err := podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: func(oldObj, newObj interface{}) {
+			p.metrics.IncEvents()
 			oldPod, ok1 := oldObj.(*v1.Pod)
 			newPod, ok2 := newObj.(*v1.Pod)
 			if !ok1 || !ok2 || oldPod == nil || newPod == nil {
@@ -110,5 +114,7 @@ func (p *PodWatcher) sendAlert(ctx context.Context, podName, containerName, reas
 	slog.Warn("indentified crash reason; sending an alert", "pod", podName, "reason", reason)
 	if err := p.notifier.SendAlert(ctx, p.chatID, msg); err != nil {
 		slog.Error("failed to send a alert", "err", err)
+		return
 	}
+	p.metrics.IncAlerts(reason)
 }
