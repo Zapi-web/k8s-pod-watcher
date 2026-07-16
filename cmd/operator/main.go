@@ -75,7 +75,7 @@ func run() int {
 	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + cfg.MetricsPort,
 		Handler: mux,
 	}
 
@@ -98,7 +98,7 @@ func run() int {
 }
 
 func runMetricsServer(ctx context.Context, srv *http.Server, stop context.CancelFunc) {
-	slog.Info("Starting metrics server", "port", 8080)
+	slog.Info("Starting metrics server", "addr", srv.Addr)
 	errChan := make(chan error, 1)
 
 	go func(srv *http.Server) {

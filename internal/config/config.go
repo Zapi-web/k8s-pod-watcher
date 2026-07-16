@@ -8,9 +8,10 @@ import (
 )
 
 type Config struct {
-	Token    string `env:"TELEGRAM_BOT_TOKEN"`
-	ChatID   string `env:"TELEGRAM_CHAT_ID"`
-	LogLevel string `env:"LOG_LEVEL" env-default:"info"`
+	Token       string `env:"TELEGRAM_BOT_TOKEN"`
+	ChatID      string `env:"TELEGRAM_CHAT_ID"`
+	LogLevel    string `env:"LOG_LEVEL" env-default:"info"`
+	MetricsPort string `env:"METRICS_PORT" env-default:"8080"`
 }
 
 func Init() (*Config, error) {
