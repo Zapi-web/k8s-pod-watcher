@@ -86,17 +86,17 @@ func (p *PodWatcher) processPodUpdate(ctx context.Context, oldPod, newPod *v1.Po
 
 		if isNewWaitingCrash && (!foundOld || !isOldWaitingCrash) {
 			p.sendAlert(ctx, newPod.Name, newStatus.Name, "CrashLoopBackOff", newStatus.RestartCount)
-			return
+			continue
 		}
 
 		if isNewOOMKilled && (!foundOld || !isOldOOMKilled) {
 			p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled", newStatus.RestartCount)
-			return
+			continue
 		}
 
 		if isNewPrevOOMKilled && (!foundOld || !isOldPrevOOMKilled) {
 			p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled (previous run)", newStatus.RestartCount)
-			return
+			continue
 		}
 	}
 }
