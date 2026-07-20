@@ -170,7 +170,14 @@ func TestProcessPodUpdate(t *testing.T) {
 
 			pw := New(fakeClient, mockNot, "test-chat-id", promMetrics)
 
-			pw.processPodUpdate(t.Context(), tt.oldPod, tt.newPod)
+			err := pw.processPodUpdate(t.Context(), podUpdate{
+				NewPod: tt.newPod,
+				OldPod: tt.oldPod,
+			})
+
+			if err != nil && tt.expectAlert == false {
+				t.Fatalf("unexpected error during processing: %v", err)
+			}
 
 			if tt.expectAlert {
 				if len(mockNot.sendMessages) != len(tt.expectedIssues) {

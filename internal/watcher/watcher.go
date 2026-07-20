@@ -11,13 +11,20 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 )
+
+type podUpdate struct {
+	NewPod *v1.Pod
+	OldPod *v1.Pod
+}
 
 type PodWatcher struct {
 	clientset kubernetes.Interface
 	notifier  notifier.Notifier
 	chatID    string
 	metrics   *metrics.Metrics
+	queue     workqueue.TypedRateLimitingInterface[podUpdate]
 }
 
 func New(clientset kubernetes.Interface, n notifier.Notifier, chatID string, m *metrics.Metrics) *PodWatcher {
@@ -26,6 +33,9 @@ func New(clientset kubernetes.Interface, n notifier.Notifier, chatID string, m *
 		notifier:  n,
 		chatID:    chatID,
 		metrics:   m,
+		queue: workqueue.NewTypedRateLimitingQueue[podUpdate](
+			workqueue.DefaultTypedControllerRateLimiter[podUpdate](),
+		),
 	}
 }
 
@@ -42,13 +52,23 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 			if !ok1 || !ok2 || oldPod == nil || newPod == nil {
 				return
 			}
-			p.processPodUpdate(ctx, oldPod, newPod)
+
+			p.queue.Add(podUpdate{
+				OldPod: oldPod,
+				NewPod: newPod,
+			})
 		},
 	})
 
 	if err != nil {
 		return fmt.Errorf("failed to add event handler: %w", err)
 	}
+
+	go func() {
+		<-ctx.Done()
+		slog.Info("received a signal, shuting down queue...")
+		p.queue.ShutDown()
+	}()
 
 	go podInformer.Run(ctx.Done())
 
@@ -57,10 +77,38 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 	}
 
 	slog.Info("kubernetes pod informer synced successfully")
+
+	for i := 0; i < 5; i++ {
+		go p.runWorker(ctx)
+	}
+
 	return nil
 }
 
-func (p *PodWatcher) processPodUpdate(ctx context.Context, oldPod, newPod *v1.Pod) {
+func (p *PodWatcher) runWorker(ctx context.Context) {
+	for {
+		item, shutdown := p.queue.Get()
+
+		if shutdown {
+			return
+		}
+
+		err := p.processPodUpdate(ctx, item)
+
+		if err != nil {
+			slog.Warn("failed to process update", "err", err)
+			p.queue.AddRateLimited(item)
+		} else {
+			p.queue.Forget(item)
+		}
+	}
+}
+
+func (p *PodWatcher) processPodUpdate(ctx context.Context, item podUpdate) error {
+	defer p.queue.Done(item)
+
+	newPod, oldPod := item.NewPod, item.OldPod
+
 	slog.Debug("processing pod update event", "pod", newPod.Name, "namespace", newPod.Namespace)
 
 	for _, newStatus := range newPod.Status.ContainerStatuses {
@@ -85,23 +133,31 @@ func (p *PodWatcher) processPodUpdate(ctx context.Context, oldPod, newPod *v1.Po
 		isOldPrevOOMKilled := foundOld && oldStatus.LastTerminationState.Terminated != nil && oldStatus.LastTerminationState.Terminated.Reason == "OOMKilled"
 
 		if isNewWaitingCrash && (!foundOld || !isOldWaitingCrash) {
-			p.sendAlert(ctx, newPod.Name, newStatus.Name, "CrashLoopBackOff", newStatus.RestartCount)
+			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, "CrashLoopBackOff", newStatus.RestartCount); err != nil {
+				return err
+			}
 			continue
 		}
 
 		if isNewOOMKilled && (!foundOld || !isOldOOMKilled) {
-			p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled", newStatus.RestartCount)
+			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled", newStatus.RestartCount); err != nil {
+				return err
+			}
 			continue
 		}
 
 		if isNewPrevOOMKilled && (!foundOld || !isOldPrevOOMKilled) {
-			p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled (previous run)", newStatus.RestartCount)
+			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled (previous run)", newStatus.RestartCount); err != nil {
+				return err
+			}
 			continue
 		}
 	}
+
+	return nil
 }
 
-func (p *PodWatcher) sendAlert(ctx context.Context, podName, containerName, reason string, restarts int32) {
+func (p *PodWatcher) sendAlert(ctx context.Context, podName, containerName, reason string, restarts int32) error {
 	msg := fmt.Sprintf(
 		"*Alert: Container Issue Detected!*\n\n"+
 			"*Pod*: '%s'\n"+
@@ -113,8 +169,8 @@ func (p *PodWatcher) sendAlert(ctx context.Context, podName, containerName, reas
 
 	slog.Warn("indentified crash reason; sending an alert", "pod", podName, "reason", reason)
 	if err := p.notifier.SendAlert(ctx, p.chatID, msg); err != nil {
-		slog.Error("failed to send a alert", "err", err)
-		return
+		return fmt.Errorf("failed to send an alert %w", err)
 	}
 	p.metrics.IncAlerts(reason)
+	return nil
 }
