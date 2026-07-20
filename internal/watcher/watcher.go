@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/Zapi-web/k8s-pod-watcher/internal/metrics"
 	"github.com/Zapi-web/k8s-pod-watcher/internal/notifier"
@@ -25,6 +27,7 @@ type PodWatcher struct {
 	chatID    string
 	metrics   *metrics.Metrics
 	queue     workqueue.TypedRateLimitingInterface[podUpdate]
+	wg        sync.WaitGroup
 }
 
 func New(clientset kubernetes.Interface, n notifier.Notifier, chatID string, m *metrics.Metrics) *PodWatcher {
@@ -34,7 +37,10 @@ func New(clientset kubernetes.Interface, n notifier.Notifier, chatID string, m *
 		chatID:    chatID,
 		metrics:   m,
 		queue: workqueue.NewTypedRateLimitingQueue[podUpdate](
-			workqueue.DefaultTypedControllerRateLimiter[podUpdate](),
+			workqueue.NewTypedItemExponentialFailureRateLimiter[podUpdate](
+				5*time.Second,
+				5*time.Minute,
+			),
 		),
 	}
 }
@@ -64,10 +70,17 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to add event handler: %w", err)
 	}
 
+	for i := 0; i < 5; i++ {
+		p.wg.Add(1)
+	}
+
 	go func() {
 		<-ctx.Done()
-		slog.Info("received a signal, shuting down queue...")
+		slog.Info("received a signal, shutting down queue...")
 		p.queue.ShutDown()
+
+		p.wg.Wait()
+		slog.Info("all workers drained successfully")
 	}()
 
 	go podInformer.Run(ctx.Done())
@@ -79,7 +92,10 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 	slog.Info("kubernetes pod informer synced successfully")
 
 	for i := 0; i < 5; i++ {
-		go p.runWorker(ctx)
+		go func() {
+			defer p.wg.Done()
+			p.runWorker(ctx)
+		}()
 	}
 
 	return nil
@@ -115,9 +131,9 @@ func (p *PodWatcher) processPodUpdate(ctx context.Context, item podUpdate) error
 		var oldStatus v1.ContainerStatus
 		foundOld := false
 
-		for _, os := range oldPod.Status.ContainerStatuses {
-			if os.Name == newStatus.Name {
-				oldStatus = os
+		for _, oldContainerStatus := range oldPod.Status.ContainerStatuses {
+			if oldContainerStatus.Name == newStatus.Name {
+				oldStatus = oldContainerStatus
 				foundOld = true
 				break
 			}
@@ -167,7 +183,7 @@ func (p *PodWatcher) sendAlert(ctx context.Context, podName, containerName, reas
 		podName, containerName, reason, restarts,
 	)
 
-	slog.Warn("indentified crash reason; sending an alert", "pod", podName, "reason", reason)
+	slog.Warn("identified crash reason;; sending an alert", "pod", podName, "reason", reason)
 	if err := p.notifier.SendAlert(ctx, p.chatID, msg); err != nil {
 		return fmt.Errorf("failed to send an alert %w", err)
 	}
