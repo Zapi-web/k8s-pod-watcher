@@ -36,7 +36,7 @@ func New(clientset kubernetes.Interface, n notifier.Notifier, chatID string, m *
 		notifier:  n,
 		chatID:    chatID,
 		metrics:   m,
-		queue: workqueue.NewTypedRateLimitingQueue[podUpdate](
+		queue: workqueue.NewTypedRateLimitingQueue(
 			workqueue.NewTypedItemExponentialFailureRateLimiter[podUpdate](
 				5*time.Second,
 				5*time.Minute,
@@ -70,19 +70,6 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to add event handler: %w", err)
 	}
 
-	for i := 0; i < 5; i++ {
-		p.wg.Add(1)
-	}
-
-	go func() {
-		<-ctx.Done()
-		slog.Info("received a signal, shutting down queue...")
-		p.queue.ShutDown()
-
-		p.wg.Wait()
-		slog.Info("all workers drained successfully")
-	}()
-
 	go podInformer.Run(ctx.Done())
 
 	if !cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced) {
@@ -92,6 +79,7 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 	slog.Info("kubernetes pod informer synced successfully")
 
 	for i := 0; i < 5; i++ {
+		p.wg.Add(1)
 		go func() {
 			defer p.wg.Done()
 			p.runWorker(ctx)
@@ -99,6 +87,13 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (p *PodWatcher) Stop() {
+	slog.Info("received a signal, shutting down queue...")
+	p.queue.ShutDown()
+	p.wg.Wait()
+	slog.Info("all workers drained successfully")
 }
 
 func (p *PodWatcher) runWorker(ctx context.Context) {
@@ -183,9 +178,9 @@ func (p *PodWatcher) sendAlert(ctx context.Context, podName, containerName, reas
 		podName, containerName, reason, restarts,
 	)
 
-	slog.Warn("identified crash reason;; sending an alert", "pod", podName, "reason", reason)
+	slog.Warn("identified crash reason; sending an alert", "pod", podName, "reason", reason)
 	if err := p.notifier.SendAlert(ctx, p.chatID, msg); err != nil {
-		return fmt.Errorf("failed to send an alert %w", err)
+		return fmt.Errorf("failed to send an alert: %w", err)
 	}
 	p.metrics.IncAlerts(reason)
 	return nil
