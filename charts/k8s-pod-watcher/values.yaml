@@ -16,6 +16,8 @@ metrics:
   port: 8080
   path: /metrics
 
+channels: telegram # for example: telegram,discord,slack (separated by ',')
+
 # =======================
 # SECRETS
 # =======================
@@ -23,6 +25,10 @@ metrics:
 telegram:
   token: ""
   chatID: ""
+discord:
+  webHook: ""
+slack:
+  webHook: ""
 
 # =======================
 # RESOURCES

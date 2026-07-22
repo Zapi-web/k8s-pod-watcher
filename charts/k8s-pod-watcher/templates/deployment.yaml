@@ -49,6 +49,8 @@ spec:
           value: {{ .Values.logLevel | default "info" | quote }}
         - name: METRICS_PORT
           value: {{ .Values.metrics.port | default "8080" | quote }}
+        - name: NOTIFICATION_CHANNELS
+          value: {{ .Values.channels | quote }}
 
         ports:
         - containerPort: {{ .Values.metrics.port | default 8080 }}
