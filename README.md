@@ -12,11 +12,12 @@ A lightweight **Kubernetes** Watcher made with **Go**, easily deploys to your cl
 * **GHCR.io** - Container/Chart registry for easy pull
 
 ## Features
-* - **Structured logging:** All application logs are processed with `slog` in JSON format.
-* - **Lightweight:** Highly resource-efficient, consuming significantly less RAM and CPU than production standards like Alertmanager.
-* - **Anti-Spam Protection** Blocks duplicate notifications until container will restart again.
-* - **Safety** Built on a distroless Docker base image combined with a strict `securityContext` to minimize the container's attack surface.
-* - **Prometheus-ready** Exposes native metrics out of the box, allowing you to easily plug it into an existing monitoring stack if needed.
+* **Structured logging:** All application logs are processed with `slog` in JSON format.
+* **Lightweight:** Highly resource-efficient, consuming significantly less RAM and CPU than production standards like Alertmanager.
+* **Anti-Spam Protection** Blocks duplicate notifications until container will restart again.
+* **Safety** Built on a distroless Docker base image combined with a strict `securityContext` to minimize the container's attack surface.
+* **Prometheus-ready** Exposes native metrics out of the box, allowing you to easily plug it into an existing monitoring stack if needed.
+* **Multi-Notifier** Supports **Telegram**,**Slack** and **Discord** out of the box
 
 ## Configuration
 
@@ -24,8 +25,11 @@ The application is configured dynamically using your Helm `values.yaml`.
 
 | Value | Description | Default |
 | :--- | :--- | :--- |
-| `telegram.token` | Your Telegram Bot Father access token | `""` (Required) |
-| `telegram.chatID` | Your target Telegram channel/chat ID | `""` (Required) |
+| `channels` | The list of your channels, must be separated by `,` | `telegram`|
+| `telegram.token` | Your Telegram Bot Father access token | `""` *(Required for telegram)* |
+| `telegram.chatID` | Your target Telegram channel/chat ID | `""` *(Required for telegram)* |
+| `slack.webHook` | Your Slack WebHook | `""` *(Required for slack)* |
+| `discord.webHook` | Your Discord WebHook | `""` *(Required for discord)* |
 | `logLevel` | Application log verbosity (`debug`, `info`, `warn`, `error`) | `"info"` |
 | `metrics.enabled` | Enable/disable the metrics collection server | `false` |
 | `metrics.port` | Network port for scraping and application health probes | `8080` |
@@ -36,9 +40,14 @@ The application is configured dynamically using your Helm `values.yaml`.
 Create or modify your local `values.yaml` to include your Telegram authentication tokens:
 
 ```yaml
+channels: telegram,slack,discord # or just telegram
 telegram:
   token: "YOUR_TELEGRAM_BOT_TOKEN"
   chatID: "YOUR_TELEGRAM_CHAT_ID"
+discord:
+  webHook: "YOUR_WEBHOOK_HERE"
+slack:
+  webHook: "YOUR_WEBHOOK_HERE"
 
 metrics:
   enabled: true # Optional: turns on prometheus tracking & probes
@@ -54,5 +63,5 @@ helm install k8s-pod-watcher oci://ghcr.io/zapi-web/charts/k8s-pod-watcher \
 ```
 
 ## Endpoint
-* GET /metrics; Emposes prometheus metrics
+* GET /metrics; Exposes prometheus metrics
 * GET /health; Returns 200 OK for liveness and readiness probes.

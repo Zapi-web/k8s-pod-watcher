@@ -1,53 +1,75 @@
 package notifier
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
-
-	"github.com/go-telegram/bot"
+	"net/http"
+	"time"
 )
 
 type TelegramNotifier struct {
-	tgBot *bot.Bot
+	chatID   string
+	url      string
+	tgClient *http.Client
 }
 
-func New(token string) (*TelegramNotifier, error) {
-	b, err := bot.New(token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to bot via token: %w", err)
+type tgSendParams struct {
+	ChatID    string `json:"chat_id"`
+	ParseMode string `json:"parse_mode"`
+	Text      string `json:"text"`
+}
+
+func newTelegram(token, chatID string, client *http.Client) *TelegramNotifier {
+	if client == nil {
+		client = &http.Client{
+			Timeout: 5 * time.Second,
+		}
 	}
 
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+
 	return &TelegramNotifier{
-		tgBot: b,
-	}, nil
+		chatID:   chatID,
+		url:      url,
+		tgClient: client,
+	}
 }
 
-func (t *TelegramNotifier) Start(ctx context.Context) {
-	slog.Info("trying to start the bot...")
-	t.tgBot.Start(ctx)
-}
-
-func (t *TelegramNotifier) SendAlert(ctx context.Context, chatID string, alert string) error {
-	params := &bot.SendMessageParams{
-		ChatID:    chatID,
+func (t *TelegramNotifier) SendAlert(ctx context.Context, alert string) error {
+	params := tgSendParams{
+		ChatID:    t.chatID,
 		Text:      alert,
 		ParseMode: "Markdown",
 	}
 
-	_, err := t.tgBot.SendMessage(ctx, params)
+	body, err := json.Marshal(params)
 	if err != nil {
-		return fmt.Errorf("failed to send an alert: %w", err)
+		return fmt.Errorf("failed to marshal alert params: %w", err)
 	}
 
-	return nil
-}
-
-func (t *TelegramNotifier) Stop(ctx context.Context) error {
-	slog.Info("trying to stop the bot...")
-	_, err := t.tgBot.Close(ctx)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.url, bytes.NewBuffer(body))
 	if err != nil {
-		return fmt.Errorf("failed to stop graceful: %w", err)
+		return fmt.Errorf("failed to create http request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := t.tgClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send telegram request: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("failed to close response body", "err", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram returned non-200 status (statud %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	return nil

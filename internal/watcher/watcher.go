@@ -24,17 +24,15 @@ type podUpdate struct {
 type PodWatcher struct {
 	clientset kubernetes.Interface
 	notifier  notifier.Notifier
-	chatID    string
 	metrics   *metrics.Metrics
 	queue     workqueue.TypedRateLimitingInterface[podUpdate]
 	wg        sync.WaitGroup
 }
 
-func New(clientset kubernetes.Interface, n notifier.Notifier, chatID string, m *metrics.Metrics) *PodWatcher {
+func New(clientset kubernetes.Interface, n notifier.Notifier, m *metrics.Metrics) *PodWatcher {
 	return &PodWatcher{
 		clientset: clientset,
 		notifier:  n,
-		chatID:    chatID,
 		metrics:   m,
 		queue: workqueue.NewTypedRateLimitingQueue(
 			workqueue.NewTypedItemExponentialFailureRateLimiter[podUpdate](
@@ -143,13 +141,6 @@ func (p *PodWatcher) processPodUpdate(ctx context.Context, item podUpdate) error
 		isNewPrevOOMKilled := newStatus.LastTerminationState.Terminated != nil && newStatus.LastTerminationState.Terminated.Reason == "OOMKilled"
 		isOldPrevOOMKilled := foundOld && oldStatus.LastTerminationState.Terminated != nil && oldStatus.LastTerminationState.Terminated.Reason == "OOMKilled"
 
-		if isNewWaitingCrash && (!foundOld || !isOldWaitingCrash) {
-			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, "CrashLoopBackOff", newStatus.RestartCount); err != nil {
-				return err
-			}
-			continue
-		}
-
 		if isNewOOMKilled && (!foundOld || !isOldOOMKilled) {
 			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled", newStatus.RestartCount); err != nil {
 				return err
@@ -159,6 +150,13 @@ func (p *PodWatcher) processPodUpdate(ctx context.Context, item podUpdate) error
 
 		if isNewPrevOOMKilled && (!foundOld || !isOldPrevOOMKilled) {
 			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled (previous run)", newStatus.RestartCount); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if isNewWaitingCrash && (!foundOld || !isOldWaitingCrash) {
+			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, "CrashLoopBackOff", newStatus.RestartCount); err != nil {
 				return err
 			}
 			continue
@@ -179,7 +177,7 @@ func (p *PodWatcher) sendAlert(ctx context.Context, podName, containerName, reas
 	)
 
 	slog.Warn("identified crash reason; sending an alert", "pod", podName, "reason", reason)
-	if err := p.notifier.SendAlert(ctx, p.chatID, msg); err != nil {
+	if err := p.notifier.SendAlert(ctx, msg); err != nil {
 		return fmt.Errorf("failed to send an alert: %w", err)
 	}
 	p.metrics.IncAlerts(reason)

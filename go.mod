@@ -3,7 +3,6 @@ module github.com/Zapi-web/k8s-pod-watcher
 go 1.26.5
 
 require (
-	github.com/go-telegram/bot v1.22.0
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/prometheus/client_golang v1.24.0
 	k8s.io/api v0.36.2

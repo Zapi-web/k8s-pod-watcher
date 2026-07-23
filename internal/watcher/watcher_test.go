@@ -16,7 +16,7 @@ type mockNotifier struct {
 	sendMessages []string
 }
 
-func (m *mockNotifier) SendAlert(ctx context.Context, chatID string, reason string) error {
+func (m *mockNotifier) SendAlert(ctx context.Context, reason string) error {
 	m.sendMessages = append(m.sendMessages, reason)
 	return nil
 }
@@ -168,7 +168,7 @@ func TestProcessPodUpdate(t *testing.T) {
 			reg := prometheus.NewRegistry()
 			promMetrics := metrics.New(reg)
 
-			pw := New(fakeClient, mockNot, "test-chat-id", promMetrics)
+			pw := New(fakeClient, mockNot, promMetrics)
 
 			err := pw.processPodUpdate(t.Context(), podUpdate{
 				NewPod: tt.newPod,
