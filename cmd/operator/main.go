@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/Zapi-web/k8s-pod-watcher/internal/config"
 	"github.com/Zapi-web/k8s-pod-watcher/internal/kube"
@@ -38,24 +37,17 @@ func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	tgNotif, err := notifier.New(cfg.Token)
+	multiNotif, err := notifier.InitMulti(&notifier.NotifierDependencies{
+		TgToken:        cfg.Token,
+		TgChatID:       cfg.ChatID,
+		SlackWebHook:   cfg.SlackWebhook,
+		DiscordWebHook: cfg.DiscordWebhook,
+	}, cfg.Channels)
 
 	if err != nil {
-		slog.Error("failed to create notifier", "err", err)
+		slog.Error("failed to initialize notifiers", "err", err)
 		return 1
 	}
-
-	go tgNotif.Start(ctx)
-	defer func() {
-		slog.Info("trying to stop telegram graceful")
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := tgNotif.Stop(ctx); err != nil {
-			slog.Error("failed to stop telegram notifier", "err", err)
-		}
-	}()
 
 	client, err := kube.NewKubeClient()
 
@@ -77,7 +69,7 @@ func run() int {
 	srv := server.New(cfg.MetricsPort, mux)
 	srvErrChan := srv.RunMetricsServer(ctx)
 
-	watch := watcher.New(client, tgNotif, cfg.ChatID, promMetrics)
+	watch := watcher.New(client, multiNotif, promMetrics)
 
 	err = watch.Start(ctx)
 	if err != nil {

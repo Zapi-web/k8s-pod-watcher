@@ -45,6 +45,16 @@ spec:
             secretKeyRef:
               name: {{ .Release.Name }}-secret
               key: TELEGRAM_CHAT_ID
+        - name: DISCORD_WEBHOOK
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secret
+              key: DISCORD_WEBHOOK
+        - name: SLACK_WEBHOOK
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secret
+              key: SLACK_WEBHOOK
         - name: LOG_LEVEL
           value: {{ .Values.logLevel | default "info" | quote }}
         - name: METRICS_PORT
