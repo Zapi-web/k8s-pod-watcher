@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/Zapi-web/k8s-pod-watcher/internal/config"
@@ -71,12 +72,31 @@ func run() int {
 
 	watch := watcher.New(client, multiNotif, promMetrics)
 
-	err = watch.Start(ctx)
-	if err != nil {
-		slog.Error("failed to start kubernetes watcher", "err", err)
-		return 1
+	electorConf := kube.LeaderElectionConfig{
+		Client:         client,
+		LeaseName:      cfg.LeaseName,
+		LeaseNamespace: cfg.PodNamespace,
+		Identity:       cfg.Identity,
+		OnStart: func(ctx context.Context) {
+			if err := watch.Start(ctx); err != nil {
+				slog.Error("failed to start kubernetes watcher", "err", err)
+				stop()
+			}
+		},
+		OnStop: func() {
+			slog.Warn("leadership lost, stopping watcher")
+			watch.Stop()
+		},
 	}
-	defer watch.Stop()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := kube.RunLeaderElection(ctx, electorConf); err != nil {
+			slog.Error("leader election error", "err", err)
+		}
+	}()
 
 	slog.Info("system fully started, waiting for Pod failures")
 	select {
@@ -84,12 +104,15 @@ func run() int {
 		if err != nil {
 			slog.Error("received an error from metrics server", "err", err)
 			stop()
+			wg.Wait()
 			return 1
 		}
 	case <-ctx.Done():
 		slog.Info("received a signal, starting graceful shutdown")
 	}
 
+	<-srvErrChan
+	wg.Wait()
 	slog.Debug("watcher stopped")
 	return 0
 }

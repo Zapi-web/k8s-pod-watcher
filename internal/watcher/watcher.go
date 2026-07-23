@@ -58,8 +58,8 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 			}
 
 			p.queue.Add(podUpdate{
-				OldPod: oldPod,
-				NewPod: newPod,
+				OldPod: oldPod.DeepCopy(),
+				NewPod: newPod.DeepCopy(),
 			})
 		},
 	})

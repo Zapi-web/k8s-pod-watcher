@@ -12,7 +12,7 @@ metadata:
 spec:
   strategy:
     type: Recreate
-  replicas: 1
+  replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
       app: {{ .Values.appLabel }}
@@ -61,6 +61,16 @@ spec:
           value: {{ .Values.metrics.port | default "8080" | quote }}
         - name: NOTIFICATION_CHANNELS
           value: {{ .Values.channels | quote }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: LEASE_NAME
+          value: {{ .Release.Name }}-lock
 
         ports:
         - containerPort: {{ .Values.metrics.port | default 8080 }}

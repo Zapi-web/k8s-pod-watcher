@@ -17,6 +17,9 @@ type Config struct {
 	DiscordWebhook string   `env:"DISCORD_WEBHOOK"`
 	LogLevel       string   `env:"LOG_LEVEL" env-default:"info"`
 	MetricsPort    string   `env:"METRICS_PORT" env-default:"8080"`
+	Identity       string   `env:"POD_NAME"`
+	PodNamespace   string   `env:"POD_NAMESPACE" env-default:"default"`
+	LeaseName      string   `env:"LEASE_NAME" env-default:"k8s-pod-watcher-lock"`
 }
 
 func Init() (*Config, error) {
