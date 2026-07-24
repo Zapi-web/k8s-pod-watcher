@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zapi-web/k8s-pod-watcher/internal/kube"
 	"github.com/Zapi-web/k8s-pod-watcher/internal/metrics"
 	"github.com/Zapi-web/k8s-pod-watcher/internal/notifier"
 	v1 "k8s.io/api/core/v1"
@@ -34,17 +35,17 @@ func New(clientset kubernetes.Interface, n notifier.Notifier, m *metrics.Metrics
 		clientset: clientset,
 		notifier:  n,
 		metrics:   m,
-		queue: workqueue.NewTypedRateLimitingQueue(
-			workqueue.NewTypedItemExponentialFailureRateLimiter[podUpdate](
-				5*time.Second,
-				5*time.Minute,
-			),
-		),
 	}
 }
 
 func (p *PodWatcher) Start(ctx context.Context) error {
 	slog.Info("Initializing Kubernetes pod informer...")
+	p.queue = workqueue.NewTypedRateLimitingQueue(
+		workqueue.NewTypedItemExponentialFailureRateLimiter[podUpdate](
+			5*time.Second,
+			5*time.Minute,
+		),
+	)
 	factory := informers.NewSharedInformerFactory(p.clientset, 0)
 	podInformer := factory.Core().V1().Pods().Informer()
 
@@ -141,39 +142,46 @@ func (p *PodWatcher) processPodUpdate(ctx context.Context, item podUpdate) error
 		isNewPrevOOMKilled := newStatus.LastTerminationState.Terminated != nil && newStatus.LastTerminationState.Terminated.Reason == "OOMKilled"
 		isOldPrevOOMKilled := foundOld && oldStatus.LastTerminationState.Terminated != nil && oldStatus.LastTerminationState.Terminated.Reason == "OOMKilled"
 
-		if isNewOOMKilled && (!foundOld || !isOldOOMKilled) {
-			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled", newStatus.RestartCount); err != nil {
-				return err
-			}
-			continue
+		var reason string
+		switch {
+		case isNewOOMKilled && (!foundOld || !isOldOOMKilled):
+			reason = "OOMKilled"
+		case isNewPrevOOMKilled && (!foundOld || !isOldPrevOOMKilled):
+			reason = "OOMKilled (previous run)"
+		case isNewWaitingCrash && (!foundOld || !isOldWaitingCrash):
+			reason = "CrashLoopBackOff"
 		}
 
-		if isNewPrevOOMKilled && (!foundOld || !isOldPrevOOMKilled) {
-			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, "OOMKilled (previous run)", newStatus.RestartCount); err != nil {
+		if reason != "" {
+			logs := p.getLogs(ctx, newPod.Namespace, newPod.Name, newStatus.Name, 10)
+			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, reason, logs, newStatus.RestartCount); err != nil {
 				return err
 			}
-			continue
-		}
-
-		if isNewWaitingCrash && (!foundOld || !isOldWaitingCrash) {
-			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, "CrashLoopBackOff", newStatus.RestartCount); err != nil {
-				return err
-			}
-			continue
 		}
 	}
 
 	return nil
 }
 
-func (p *PodWatcher) sendAlert(ctx context.Context, podName, containerName, reason string, restarts int32) error {
+func (p *PodWatcher) getLogs(ctx context.Context, namespace, podName, containerName string, lines int64) string {
+	logs, err := kube.GetLastLogs(ctx, p.clientset, namespace, podName, containerName, lines)
+	if err != nil {
+		slog.Warn("failed to get logs", "pod", podName, "container", containerName)
+		logs = "failed to get last logs"
+	}
+
+	return logs
+}
+
+func (p *PodWatcher) sendAlert(ctx context.Context, podName, containerName, reason, logs string, restarts int32) error {
 	msg := fmt.Sprintf(
-		"*Alert: Container Issue Detected!*\n\n"+
-			"*Pod*: '%s'\n"+
-			"*Container*: '%s'\n"+
-			"*Issue*: '%s'\n"+
-			"*Restart Count*: '%d'",
-		podName, containerName, reason, restarts,
+		"**Alert: Container Issue Detected!**\n\n"+
+			"**Pod**: '%s'\n"+
+			"**Container**: '%s'\n"+
+			"**Issue**: '%s'\n"+
+			"**Restart Count**: '%d'\n"+
+			"**Last Logs**: ```%s```\n",
+		podName, containerName, reason, restarts, logs,
 	)
 
 	slog.Warn("identified crash reason; sending an alert", "pod", podName, "reason", reason)
