@@ -1,10 +1,14 @@
 package kube
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"path/filepath"
 
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -27,4 +31,37 @@ func NewKubeClient() (kubernetes.Interface, error) {
 	}
 
 	return kubernetes.NewForConfig(kubeCfg)
+}
+
+func GetLastLogs(ctx context.Context, client kubernetes.Interface, namespace, podName, containerName string, tailLines int64) (string, error) {
+	opts := &v1.PodLogOptions{
+		Container: containerName,
+		TailLines: &tailLines,
+		Previous:  true,
+	}
+
+	req := client.CoreV1().Pods(namespace).GetLogs(podName, opts)
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		opts.Previous = false
+		req = client.CoreV1().Pods(namespace).GetLogs(podName, opts)
+		stream, err = req.Stream(ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed to open log stream: %w", err)
+		}
+	}
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slog.Error("failed to close logs stream", "err", err)
+		}
+	}()
+
+	limitStream := io.LimitReader(stream, 4096)
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, limitStream); err != nil {
+		return "", fmt.Errorf("failed to read log stream: %w", err)
+	}
+
+	return buf.String(), nil
 }

@@ -4,12 +4,14 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zapi-web/k8s-pod-watcher/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/util/workqueue"
 )
 
 type mockNotifier struct {
@@ -169,6 +171,9 @@ func TestProcessPodUpdate(t *testing.T) {
 			promMetrics := metrics.New(reg)
 
 			pw := New(fakeClient, mockNot, promMetrics)
+			pw.queue = workqueue.NewTypedRateLimitingQueue(
+				workqueue.NewTypedItemExponentialFailureRateLimiter[podUpdate](5*time.Second, 5*time.Minute),
+			)
 
 			err := pw.processPodUpdate(t.Context(), podUpdate{
 				NewPod: tt.newPod,
