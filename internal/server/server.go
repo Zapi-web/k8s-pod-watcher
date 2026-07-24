@@ -25,12 +25,14 @@ func (s *Server) RunMetricsServer(ctx context.Context) <-chan error {
 	errChan := make(chan error, 1)
 
 	go func() {
-		if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errChan <- err
-		}
-	}()
+		defer close(errChan)
 
-	go func() {
+		go func() {
+			if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				errChan <- err
+			}
+		}()
+
 		<-ctx.Done()
 		slog.Info("received a signal; draining HTTP server connection")
 
@@ -38,8 +40,10 @@ func (s *Server) RunMetricsServer(ctx context.Context) <-chan error {
 		defer cancel()
 
 		if err := s.srv.Shutdown(shutdownCtx); err != nil {
-			_ = s.srv.Close()
 			slog.Error("failed to shutdown HTTP server gracefully", "err", err)
+			if closeErr := s.srv.Close(); closeErr != nil {
+				slog.Error("failed to force-shutdown HTTP server", "err", closeErr)
+			}
 		}
 	}()
 
