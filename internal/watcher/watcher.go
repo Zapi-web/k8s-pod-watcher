@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -153,7 +154,10 @@ func (p *PodWatcher) processPodUpdate(ctx context.Context, item podUpdate) error
 		}
 
 		if reason != "" {
-			logs := p.getLogs(ctx, newPod.Namespace, newPod.Name, newStatus.Name, 10)
+			logCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+
+			logs := p.getLogs(logCtx, newPod.Namespace, newPod.Name, newStatus.Name, 10)
+			cancel()
 			if err := p.sendAlert(ctx, newPod.Name, newStatus.Name, reason, logs, newStatus.RestartCount); err != nil {
 				return err
 			}
@@ -166,7 +170,11 @@ func (p *PodWatcher) processPodUpdate(ctx context.Context, item podUpdate) error
 func (p *PodWatcher) getLogs(ctx context.Context, namespace, podName, containerName string, lines int64) string {
 	logs, err := kube.GetLastLogs(ctx, p.clientset, namespace, podName, containerName, lines)
 	if err != nil {
-		slog.Warn("failed to get logs", "pod", podName, "container", containerName)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			slog.Warn("log fetch timed out", "pod", podName, "container", containerName)
+			return "log fetch timed out (exceeded 2s limit)"
+		}
+		slog.Warn("failed to get logs", "pod", podName, "container", containerName, "err", err)
 		logs = "failed to get last logs"
 	}
 

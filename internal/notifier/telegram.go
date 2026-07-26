@@ -1,12 +1,8 @@
 package notifier
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"time"
 )
@@ -43,33 +39,15 @@ func (t *TelegramNotifier) SendAlert(ctx context.Context, alert string) error {
 	params := tgSendParams{
 		ChatID:    t.chatID,
 		Text:      alert,
-		ParseMode: "Markdown",
+		ParseMode: "MarkdownV2",
 	}
 
-	body, err := json.Marshal(params)
+	alertCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	err := doRequest(alertCtx, t.tgClient, t.url, params)
+
 	if err != nil {
-		return fmt.Errorf("failed to marshal alert params: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.url, bytes.NewBuffer(body))
-	if err != nil {
-		return fmt.Errorf("failed to create http request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := t.tgClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send telegram request: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Error("failed to close response body", "err", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("telegram returned non-200 status (statud %d): %s", resp.StatusCode, string(respBody))
+		return fmt.Errorf("failed to send an alert to telegram: %w", err)
 	}
 
 	return nil
