@@ -59,15 +59,14 @@ func run() int {
 
 	reg := prometheus.NewRegistry()
 	promMetrics := metrics.New(reg)
+	handlers := server.NewHealthHandlers()
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	})
+	mux.HandleFunc("/healthz", handlers.ServeHealthz)
+	mux.HandleFunc("/readyz", handlers.ServeReadyz)
 
-	srv := server.New(cfg.MetricsPort, mux)
+	srv := server.NewServer(cfg.MetricsPort, mux)
 	srvErrChan := srv.RunMetricsServer(ctx)
 
 	watch := watcher.New(client, multiNotif, promMetrics)
@@ -82,9 +81,11 @@ func run() int {
 				slog.Error("failed to start kubernetes watcher", "err", err)
 				stop()
 			}
+			handlers.SetStatus(true)
 		},
 		OnStop: func() {
 			slog.Warn("leadership lost, stopping watcher")
+			handlers.SetStatus(false)
 			watch.Stop()
 		},
 	}

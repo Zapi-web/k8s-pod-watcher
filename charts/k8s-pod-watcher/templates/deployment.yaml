@@ -11,7 +11,10 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
@@ -81,16 +84,16 @@ spec:
         
         livenessProbe:
           httpGet:
-            path: /health
-            port: metrics
-          initialDelaySeconds: 5
-          periodSeconds: 15
-        readinessProbe:
-          httpGet:
-            path: /health
+            path: /healthz
             port: metrics
           initialDelaySeconds: 5
           periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: metrics
+          initialDelaySeconds: 5
+          periodSeconds: 5
         
         securityContext:
           allowPrivilegeEscalation: false
