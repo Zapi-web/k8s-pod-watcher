@@ -43,7 +43,8 @@ func Init() (*Config, error) {
 }
 
 func (c *Config) Validate() error {
-	if _, err := strconv.Atoi(c.MetricsPort); err != nil {
+	port, err := strconv.Atoi(c.MetricsPort)
+	if err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("invalid METRICS_PORT %q: %w", c.MetricsPort, err)
 	}
 

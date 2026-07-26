@@ -5,3 +5,4 @@ charts/
 .env
 .env*
 test/
+_test*

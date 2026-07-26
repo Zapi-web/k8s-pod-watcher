@@ -31,7 +31,7 @@ func InitMulti(cfg *NotifierDependencies, channels []string) (Notifier, error) {
 	for _, ch := range channels {
 		switch ch {
 		case "telegram":
-			tg := newTelegram(cfg.TgToken, cfg.TgChatID, &sharedClient)
+			tg := newTelegram(cfg.TgToken, cfg.TgChatID, "", &sharedClient)
 			list = append(list, tg)
 		case "slack":
 			sl := newSlack(&sharedClient, cfg.SlackWebHook)
