@@ -39,7 +39,7 @@ func (t *TelegramNotifier) SendAlert(ctx context.Context, alert string) error {
 	params := tgSendParams{
 		ChatID:    t.chatID,
 		Text:      alert,
-		ParseMode: "MarkdownV2",
+		ParseMode: "Markdown",
 	}
 
 	alertCtx, cancel := context.WithTimeout(ctx, 5*time.Second)

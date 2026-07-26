@@ -11,7 +11,7 @@ type Server struct {
 	srv *http.Server
 }
 
-func New(port string, handler http.Handler) *Server {
+func NewServer(port string, handler http.Handler) *Server {
 	return &Server{
 		srv: &http.Server{
 			Addr:    ":" + port,
