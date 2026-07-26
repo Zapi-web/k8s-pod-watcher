@@ -1,12 +1,8 @@
 package notifier
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"time"
 )
@@ -38,30 +34,12 @@ func (d *DiscordNotifier) SendAlert(ctx context.Context, alert string) error {
 		Content: alert,
 	}
 
-	body, err := json.Marshal(params)
-	if err != nil {
-		return fmt.Errorf("failed to marshal alert params: %w", err)
-	}
+	alertCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	err := doRequest(alertCtx, d.dsClient, d.webHook, params)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.webHook, bytes.NewBuffer(body))
 	if err != nil {
-		return fmt.Errorf("failed to create http request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := d.dsClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send discord request: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Error("failed to close response body", "err", err)
-		}
-	}()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("discord API error (statud %d): %s", resp.StatusCode, string(respBody))
+		return fmt.Errorf("failed to send an alert to discord: %w", err)
 	}
 
 	return nil
