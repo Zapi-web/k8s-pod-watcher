@@ -19,14 +19,19 @@ type tgSendParams struct {
 	Text      string `json:"text"`
 }
 
-func newTelegram(token, chatID string, client *http.Client) *TelegramNotifier {
+func newTelegram(token, chatID, custromURL string, client *http.Client) *TelegramNotifier {
 	if client == nil {
 		client = &http.Client{
 			Timeout: 5 * time.Second,
 		}
 	}
 
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+	var url string
+	if custromURL == "" {
+		url = fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+	} else {
+		url = custromURL
+	}
 
 	return &TelegramNotifier{
 		chatID:   chatID,

@@ -202,3 +202,29 @@ func TestProcessPodUpdate(t *testing.T) {
 		})
 	}
 }
+
+func TestPodWatcher_Lifecycle_StartAndStop(t *testing.T) {
+	client := fake.NewClientset()
+	reg := prometheus.NewRegistry()
+	testWatcher := New(client, &mockNotifier{}, metrics.New(reg))
+
+	ctx1, cancel1 := context.WithCancel(t.Context())
+	err := testWatcher.Start(ctx1)
+
+	if err != nil {
+		t.Fatalf("unexpected error at first launch, got %v", err)
+	}
+
+	cancel1()
+	testWatcher.Stop()
+
+	ctx2, cancel2 := context.WithCancel(t.Context())
+
+	err = testWatcher.Start(ctx2)
+
+	if err != nil {
+		t.Fatalf("unexpected error at second launch, got %v", err)
+	}
+	cancel2()
+	testWatcher.Stop()
+}
