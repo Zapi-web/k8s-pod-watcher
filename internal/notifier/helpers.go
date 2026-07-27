@@ -33,8 +33,11 @@ func doRequest(ctx context.Context, client *http.Client, url string, params any)
 		}
 	}()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("API error (status %d): failed to read body: %w", resp.StatusCode, err)
+		}
 		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
