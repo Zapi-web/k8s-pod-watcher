@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Zapi-web/k8s-pod-watcher/internal/config"
 	"github.com/Zapi-web/k8s-pod-watcher/internal/kube"
@@ -50,6 +51,10 @@ func run() int {
 		return 1
 	}
 
+	batch := notifier.NewBatchNotifier(multiNotif, 10*time.Second, 20, 5)
+	batch.Start(ctx)
+	defer batch.Stop()
+
 	client, err := kube.NewKubeClient()
 
 	if err != nil {
@@ -69,7 +74,7 @@ func run() int {
 	srv := server.NewServer(cfg.MetricsPort, mux)
 	srvErrChan := srv.RunMetricsServer(ctx)
 
-	watch := watcher.New(client, multiNotif, promMetrics, cfg.PodNamespace)
+	watch := watcher.New(client, batch, promMetrics, cfg.PodNamespace)
 
 	electorConf := kube.LeaderElectionConfig{
 		Client:         client,
