@@ -27,15 +27,17 @@ type PodWatcher struct {
 	clientset kubernetes.Interface
 	notifier  notifier.Notifier
 	metrics   *metrics.Metrics
+	namespace string
 	queue     workqueue.TypedRateLimitingInterface[podUpdate]
 	wg        sync.WaitGroup
 }
 
-func New(clientset kubernetes.Interface, n notifier.Notifier, m *metrics.Metrics) *PodWatcher {
+func New(clientset kubernetes.Interface, notifier notifier.Notifier, metrics *metrics.Metrics, namespace string) *PodWatcher {
 	return &PodWatcher{
 		clientset: clientset,
-		notifier:  n,
-		metrics:   m,
+		notifier:  notifier,
+		metrics:   metrics,
+		namespace: namespace,
 	}
 }
 
@@ -47,7 +49,7 @@ func (p *PodWatcher) Start(ctx context.Context) error {
 			5*time.Minute,
 		),
 	)
-	factory := informers.NewSharedInformerFactory(p.clientset, 0)
+	factory := informers.NewSharedInformerFactoryWithOptions(p.clientset, 0, informers.WithNamespace(p.namespace))
 	podInformer := factory.Core().V1().Pods().Informer()
 
 	_, err := podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{

@@ -69,7 +69,7 @@ func run() int {
 	srv := server.NewServer(cfg.MetricsPort, mux)
 	srvErrChan := srv.RunMetricsServer(ctx)
 
-	watch := watcher.New(client, multiNotif, promMetrics)
+	watch := watcher.New(client, multiNotif, promMetrics, cfg.PodNamespace)
 
 	electorConf := kube.LeaderElectionConfig{
 		Client:         client,

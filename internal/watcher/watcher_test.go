@@ -170,7 +170,7 @@ func TestProcessPodUpdate(t *testing.T) {
 			reg := prometheus.NewRegistry()
 			promMetrics := metrics.New(reg)
 
-			pw := New(fakeClient, mockNot, promMetrics)
+			pw := New(fakeClient, mockNot, promMetrics, "default")
 			pw.queue = workqueue.NewTypedRateLimitingQueue(
 				workqueue.NewTypedItemExponentialFailureRateLimiter[podUpdate](5*time.Second, 5*time.Minute),
 			)
@@ -206,7 +206,7 @@ func TestProcessPodUpdate(t *testing.T) {
 func TestPodWatcher_Lifecycle_StartAndStop(t *testing.T) {
 	client := fake.NewClientset()
 	reg := prometheus.NewRegistry()
-	testWatcher := New(client, &mockNotifier{}, metrics.New(reg))
+	testWatcher := New(client, &mockNotifier{}, metrics.New(reg), "default")
 
 	ctx1, cancel1 := context.WithCancel(t.Context())
 	err := testWatcher.Start(ctx1)

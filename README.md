@@ -53,15 +53,15 @@ metrics:
   enabled: true # Optional: turns on prometheus tracking & probes
 ```
 ### 2. Install the Chart via OCI Registry
-Deploy the watcher directly into your cluster
+Deploy the watcher directly into your cluster and namespace
 ```bash
 helm install k8s-pod-watcher oci://ghcr.io/zapi-web/charts/k8s-pod-watcher \
-  --version latest \
+  --version 1.0.0 \
   -f values.yaml \
-  --create-namespace \
-  -n k8s-pod-watcher
+  --namespace YOUR_NAMESPACE \
 ```
 
 ## Endpoint
 * GET /metrics; Exposes prometheus metrics
-* GET /health; Returns 200 OK for liveness and readiness probes.
+* GET /healthz; Returns 200 OK for liveness and readiness probes.
+* GET /readyz; Returns 200 OK or 503 UNREADY depends on readiness of watcher
