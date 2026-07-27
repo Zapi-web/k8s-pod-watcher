@@ -14,10 +14,11 @@ A lightweight **Kubernetes** Watcher made with **Go**, easily deploys to your cl
 ## Features
 * **Structured logging:** All application logs are processed with `slog` in JSON format.
 * **Lightweight:** Highly resource-efficient, consuming significantly less RAM and CPU than production standards like Alertmanager.
-* **Anti-Spam Protection** Blocks duplicate notifications until container will restart again.
-* **Safety** Built on a distroless Docker base image combined with a strict `securityContext` to minimize the container's attack surface.
-* **Prometheus-ready** Exposes native metrics out of the box, allowing you to easily plug it into an existing monitoring stack if needed.
-* **Multi-Notifier** Supports **Telegram**,**Slack** and **Discord** out of the box
+* **Anti-Spam Protection:** Blocks duplicate notifications until container will restart again.
+* **Safety:** Built on a distroless Docker base image combined with a strict `securityContext` to minimize the container's attack surface.
+* **Prometheus-ready:** Exposes native metrics out of the box, allowing you to easily plug it into an existing monitoring stack if needed.
+* **Multi-Notifier:** Supports **Telegram**,**Slack** and **Discord** out of the box
+* **Alert Storm Batching:** Automatically buffers and aggregates high-volume crash events during alert storms, summarizing massive failures into a single digest to prevent notification spam.
 
 ## Configuration
 
